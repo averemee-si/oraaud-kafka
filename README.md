@@ -1,6 +1,6 @@
 # oraaud-kafka
 
-[Oracle Database](https://www.oracle.com/database/index.html) audit files to Kafka transfer to [Apache Kafka](http://kafka.apache.org/)
+[Oracle Database](https://www.oracle.com/database/index.html) audit files to [Apache Kafka](http://kafka.apache.org/) transfer. 
 There are two kinds of how **oraaud-kafka** works:
 1. **oraaud-kafka** sends message to [Apache Kafka](http://kafka.apache.org/) which contains server name and absolute path to audit file (in form _hostname_:_absolute-path_) in key with audit file size as body without generation of any additional CPU overhead at RDBMS server side.
 2. **oraaud-kafka** unmarshal Oracle audit data from XML (using [dbserver_audittrail-11_2.xsd](http://www.oracle.com/webfolder/technetwork/oracleas/schema/dbserver_audittrail-11_2.xsd) schema) and sends it to [Apache Kafka](http://kafka.apache.org/) as JSON string using the same tags. As in previous case server name and absolute path to audit file (in form _hostname_:_absolute-path_) are used for message key. After being processed by **oraaud-kafka** xml file with audit information will be deleted from filesystem.
@@ -47,15 +47,7 @@ Then run as root supplied `install.sh` or run commands below
 ORAAUD_HOME=/opt/a2/agents/oraaud
 
 mkdir -p $ORAAUD_HOME/lib
-cp target/lib/commons-io-2.6.jar $ORAAUD_HOME/lib
-cp target/lib/kafka-clients-1.1.0.jar $ORAAUD_HOME/lib
-cp target/lib/log4j-1.2.17.jar $ORAAUD_HOME/lib
-cp target/lib/lz4-java-1.4.jar $ORAAUD_HOME/lib
-cp target/lib/slf4j-api-1.7.25.jar $ORAAUD_HOME/lib
-cp target/lib/snappy-java-1.1.7.1.jar $ORAAUD_HOME/lib
-cp target/lib/jackson-core-2.9.5.jar $ORAAUD_HOME/lib
-cp target/lib/jackson-annotations-2.9.5.jar $ORAAUD_HOME/lib
-cp target/lib/jackson-databind-2.9.5.jar $ORAAUD_HOME/lib
+cp target/lib/*.jar $ORAAUD_HOME/lib
 
 cp target/oraaud-kafka-0.1.0.jar $ORAAUD_HOME
 cp oraaud-kafka.sh $ORAAUD_HOME
