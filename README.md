@@ -7,7 +7,7 @@ There are two kinds of how **oraaud-kafka** works:
 
 ## Getting Started
 
-These instructions will get you a copy of the project up and running on your Oracle Database Server (at moment only Linux/Solaris/AIX supported).
+These instructions will get you a copy of the project up and running on your Oracle Database Server (at moment only Linux/Solaris/AIX OS are supported).
 
 ### Prerequisites
 
