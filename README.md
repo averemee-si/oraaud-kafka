@@ -31,9 +31,6 @@ We recommend to set **audit_sys_operations** to  **TRUE**.
 For working with **oraaud-kafka** Oracle RDBMS parameter **audit_trail** must be set to **XML, EXTENDED**
 
 
-???? [Kafka]'(http://kafka.apache.org/)s broker parameters
-
-
 ### Installing
 
 Build with
@@ -129,7 +126,7 @@ Please size [Kafka](http://kafka.apache.org/)'s settings for production environm
 
 * [Maven](https://maven.apache.org/) - Dependency Management
 
-## Statement of direction
+## TODO
 * Kerberos/SSL
 * Windows
 
