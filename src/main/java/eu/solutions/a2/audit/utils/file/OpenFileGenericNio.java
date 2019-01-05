@@ -29,7 +29,7 @@ import java.nio.channels.OverlappingFileLockException;
 public class OpenFileGenericNio implements OpenFilesIntf {
 
 	@Override
-	public boolean isLocked(String fileName) throws IOException {
+	public boolean isLocked(final String pid, final String fileName) throws IOException {
 		File file = new File(fileName); 
 		RandomAccessFile raf = new RandomAccessFile(file, "rw");
 		FileChannel channel = raf.getChannel();

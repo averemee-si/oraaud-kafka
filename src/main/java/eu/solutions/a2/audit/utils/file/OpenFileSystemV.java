@@ -13,8 +13,9 @@
 
 package eu.solutions.a2.audit.utils.file;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,12 +29,27 @@ import java.nio.file.Paths;
 public class OpenFileSystemV implements OpenFilesIntf {
 
 	@Override
-	public boolean isLocked(String fileName)  throws IOException {
-		String pid = fileName.substring(fileName.lastIndexOf(File.separator) + 1, fileName.lastIndexOf('_'));
-		pid = pid.substring(pid.lastIndexOf('_') + 1);
-		Path path = Paths.get("/proc/" + pid);
+	public boolean isLocked(final String pid, final String fileName)  throws IOException {
+		final Path path = Paths.get("/proc/" + pid);
 		if (Files.exists(path)) {
-			return true;
+			boolean result = false; 
+			try (DirectoryStream<Path> fdStream = Files.newDirectoryStream(Paths.get("/proc/" + pid + "/fd"))) {
+				for (Path fd : fdStream) {
+					if (Files.isSymbolicLink(fd)) {
+						// Only symlinks here!!!
+						if (Files.readSymbolicLink(fd).startsWith(fileName)) {
+							result = true;
+							break;
+						}
+					}
+				}
+			} catch (Exception ex) {
+				if (ex instanceof AccessDeniedException)
+					result = false;
+				else
+					throw new IOException("Something wrong with /proc filesystem!\n", ex);
+			}
+			return result;
 		} else {
 			return false;
 		}

@@ -1,9 +1,6 @@
 # oraaud-kafka
 
-[Oracle Database](https://www.oracle.com/database/index.html) audit files to [Apache Kafka](http://kafka.apache.org/) transfer. 
-There are two kinds of how **oraaud-kafka** works:
-1. **oraaud-kafka** sends message to [Apache Kafka](http://kafka.apache.org/) which contains server name and absolute path to audit file (in form _hostname_:_absolute-path_) in key with audit file size as body without generation of any additional CPU overhead at RDBMS server side.
-2. **oraaud-kafka** unmarshal Oracle audit data from XML (using [dbserver_audittrail-11_2.xsd](http://www.oracle.com/webfolder/technetwork/oracleas/schema/dbserver_audittrail-11_2.xsd) schema) and sends it to [Apache Kafka](http://kafka.apache.org/) as JSON string using the same tags. As in previous case server name and absolute path to audit file (in form _hostname_:_absolute-path_) are used for message key. After being processed by **oraaud-kafka** xml file with audit information will be deleted from filesystem.
+[Oracle Database](https://www.oracle.com/database/index.html) audit files to [Apache Kafka](http://kafka.apache.org/) transfer.
 
 ## Getting Started
 
@@ -24,7 +21,7 @@ sqlplus / as sysdba
 select NAME, VALUE from v$parameter where NAME in ('audit_sys_operations', 'audit_file_dest','audit_trail');
 REM or use 'show parameter' command
 ```
-Is it recommended to set **audit_file_dest** to separate filesystem/LUN/etc from RDBMS datafiles and logfiles.
+Is it recommended to set **audit_file_dest** to separate filesystem/LUN/etc from RDBMS datafiles, tempfiles and logfiles.
 
 We recommend to set **audit_sys_operations** to  **TRUE**.
 
@@ -68,7 +65,6 @@ Edit `oraaud-kafka.conf`, this files should looks like
 a2.watched.path = /data/oracle/adump
 a2.worker.count = 32
 a2.locked.file.query.interval = 512
-a2.send.method = cassandra
 a2.kafka.servers = dwh.a2-solutions.eu:9092
 a2.kafka.topic = ora-audit-topic
 a2.kafka.client.id = a2.audit.ai.ora112
@@ -80,13 +76,18 @@ a2.kafka.client.id = a2.audit.ai.ora112
 
 `a2.locked.file.query.interval` - interval in milliseconds between check for "file in use"
 
-`a2.send.method` - *kafka-light* for light notification or *kafka-full* for full transfer to Kafka
  
 `a2.kafka.servers` - hostname/IP address and port of Kafka installation
 
 `a2.kafka.topic` - value must match name of Kafka topic created on previous step
 
 `a2.kafka.client.id` - use any valid string value for identifying this Kafka producer
+
+`a2.security.protocol` - `SSL` if you like to transmit files using SSL
+
+`a2.security.truststore.location` - set to valid certificate store file if `a2.security.protocol` set to `SSL`
+
+`a2.security.truststore.password` - password for certificate store file if `a2.security.protocol` set to `SSL`
 
 
 ## Running 
@@ -112,7 +113,7 @@ or audit command
 AUDIT SELECT
   ON per.per_all_people_f;
 ```
-For other examples please consult Oracle RDBMS documentation. Check for audit information at [Kafka](http://kafka.apache.org/)'s side with command line consumer
+For other examples please consult Oracle Database documentation. Check for audit information at [Kafka](http://kafka.apache.org/)'s side with command line consumer
 
 ```
 bin/kafka-console-consumer.sh --from-beginning --zookeeper localhost:2181 --topic oraaud-test
@@ -120,14 +121,52 @@ bin/kafka-console-consumer.sh --from-beginning --zookeeper localhost:2181 --topi
 
 ## Deployment
 
-Please size [Kafka](http://kafka.apache.org/)'s settings for production environment
+Do not forget to align [Kafka](http://kafka.apache.org/)'s message.max.bytes and replica.fetch.max.bytes parameters with Oracle Database audit file size. To check current values in Oracle database use
+
+```
+column PARAMETER_NAME format A30
+column PARAMETER_VALUE format A20
+column AUDIT_TRAIL format A20
+select PARAMETER_NAME, PARAMETER_VALUE, AUDIT_TRAIL
+from DBA_AUDIT_MGMT_CONFIG_PARAMS
+where PARAMETER_NAME like '%SIZE%'
+```
+To change size of audit xml file
+
+```
+BEGIN
+  DBMS_AUDIT_MGMT.set_audit_trail_property(
+    audit_trail_type           => DBMS_AUDIT_MGMT.AUDIT_TRAIL_XML,
+    audit_trail_property       => DBMS_AUDIT_MGMT.OS_FILE_MAX_SIZE,
+    audit_trail_property_value => 1000);
+END;
+/
+
+BEGIN
+  DBMS_AUDIT_MGMT.set_audit_trail_property(
+    audit_trail_type           => DBMS_AUDIT_MGMT.AUDIT_TRAIL_UNIFIED,
+    audit_trail_property       => DBMS_AUDIT_MGMT.OS_FILE_MAX_SIZE,
+    audit_trail_property_value => 1000);
+END;
+/
+
+BEGIN
+  DBMS_AUDIT_MGMT.set_audit_trail_property(
+    audit_trail_type           => DBMS_AUDIT_MGMT.AUDIT_TRAIL_OS,
+    audit_trail_property       => DBMS_AUDIT_MGMT.OS_FILE_MAX_SIZE,
+    audit_trail_property_value => 1000);
+END;
+/
+```
+There is comparision of [Apache Kafka](http://kafka.apache.org/) performance and throughtput for different message size - [Finding Kafka optimal message size](https://www.idata.co.il/2018/02/finding-kafka-optimal-message-size/) and we recommend not to set Oracle Database audit file size higher than 1M.
+
 
 ## Built With
 
 * [Maven](https://maven.apache.org/) - Dependency Management
 
 ## TODO
-* Kerberos/SSL
+* Kerberos support
 * Windows
 
 ## Authors

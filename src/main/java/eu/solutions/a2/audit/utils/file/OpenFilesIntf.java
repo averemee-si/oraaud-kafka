@@ -16,5 +16,5 @@ package eu.solutions.a2.audit.utils.file;
 import java.io.IOException;
 
 public interface OpenFilesIntf {
-	public boolean isLocked(String fileName) throws IOException;
+	public boolean isLocked(final String pid, final String fileName) throws IOException;
 }

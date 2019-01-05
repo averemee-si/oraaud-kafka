@@ -26,7 +26,7 @@ import java.io.InputStreamReader;
 public class OpenFileLsof implements OpenFilesIntf {
 
 	@Override
-	public boolean isLocked(String fileName)  throws IOException {
+	public boolean isLocked(final String pid, final String fileName)  throws IOException {
 		boolean isLocked = false;
 		Process child = Runtime.getRuntime().exec("lsof " + fileName);
 		BufferedReader input = new BufferedReader(new InputStreamReader(child.getInputStream()));

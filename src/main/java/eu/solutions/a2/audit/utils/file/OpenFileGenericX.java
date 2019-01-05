@@ -14,7 +14,6 @@
 package eu.solutions.a2.audit.utils.file;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 
@@ -28,9 +27,7 @@ import java.io.InputStreamReader;
 public class OpenFileGenericX implements OpenFilesIntf {
 
 	@Override
-	public boolean isLocked(String fileName) throws IOException {
-		String pid = fileName.substring(fileName.lastIndexOf(File.separator) + 1, fileName.lastIndexOf('_'));
-		pid = pid.substring(pid.lastIndexOf('_') + 1);
+	public boolean isLocked(final String pid, final String fileName) throws IOException {
 		boolean isLocked = false;
 		Process child = Runtime.getRuntime().exec("ps " + pid);
 		BufferedReader input = new BufferedReader(new InputStreamReader(child.getInputStream()));

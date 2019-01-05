@@ -16,12 +16,11 @@ package eu.solutions.a2.audit.utils;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.log4j.Logger;
 
 public class ExceptionUtils {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ExceptionUtils.class);
+	private static final Logger LOGGER = Logger.getLogger(ExceptionUtils.class);
 
 	/**
 	 * Display the stacktrace contained in an exception.
