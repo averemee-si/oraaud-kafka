@@ -2,10 +2,10 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>eu.solutions.a2.audit</groupId>
   <artifactId>oraaud-kafka</artifactId>
-  <version>0.1.0</version>
+  <version>0.9.0</version>
   <name>oraaud-kafka</name>
   <packaging>jar</packaging>
-  <description>Oracle audit files to Kafka transfer</description>
+  <description>Oracle audit files to Apache Kafka/Amazon Kinesis transfer</description>
   <url>https://github.com/averemee-si/oraaud-kafka</url>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -16,7 +16,12 @@
   	<dependency>
   		<groupId>org.apache.kafka</groupId>
   		<artifactId>kafka-clients</artifactId>
-  		<version>2.1.0</version>
+  		<version>2.2.1</version>
+  	</dependency>
+  	<dependency>
+  		<groupId>com.amazonaws</groupId>
+  		<artifactId>amazon-kinesis-producer</artifactId>
+  		<version>0.12.11</version>
   	</dependency>
   	<dependency>
   		<groupId>commons-io</groupId>

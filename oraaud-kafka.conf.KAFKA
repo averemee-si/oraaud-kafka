@@ -1,0 +1,8 @@
+a2.watched.path = /data/oracle/adump
+a2.worker.count = 32
+a2.locked.file.query.interval = 512
+
+a2.kafka.servers = dwh.a2-solutions.eu:9092
+a2.kafka.topic = ora-audit-topic
+a2.kafka.client.id = a2.audit.ai.ora112
+

@@ -24,12 +24,20 @@ import java.nio.file.Paths;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
+import java.util.Iterator;
+import java.util.Properties;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.Producer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
@@ -39,64 +47,42 @@ import eu.solutions.a2.audit.utils.file.OpenFileGenericX;
 import eu.solutions.a2.audit.utils.file.OpenFileSystemV;
 import eu.solutions.a2.audit.utils.file.OpenFilesIntf;
 
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
-import java.util.Iterator;
-import java.util.Properties;
-import java.util.Scanner;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 public class OraaudKafka {
 
 	private static final Logger LOGGER = Logger.getLogger(OraaudKafka.class);
 
-	/**   Default interval of locked file queue refresh */
+	/**   Default interval in milliseconds of locked file queue refresh */
 	private static final int LOCKED_QUEUE_REFRESH_INTERVAL = 1000;
 
-//	private static ConcurrentLinkedQueue<String> lockedFilesQueue = null;
-	private static ConcurrentLinkedQueue<OraTrcNameHolder> lockedFilesQueue = null;
 	private static OpenFilesIntf fileLockChecker = null;
 
 	private static final Properties props = new Properties();
+	/** Supported target systems */
+	private static final int TARGET_KAFKA = 0;
+	private static final int TARGET_KINESIS = 1;
+	/** Set default target system to Apache Kafka */
+	private static int targetSystem = TARGET_KAFKA;
 	/** Default number of worker threads */
 	private static final int WORKER_THREAD_COUNT = 16;
 	/** Maximum number of worker threads */
 	private static final int WORKER_THREAD_MAX = 150;
 	/** Number of async workers for data transfer */
 	private static int workerThreadCount = WORKER_THREAD_COUNT;
-	/**   Main thread pool for Kafka jobs */
+	/**   Main thread pool for data tansfer jobs */
 	private static ThreadPoolExecutor threadPool;
-	/** Proprties for building Kafka producer */
-	private static Properties kafkaProps;
-	/** Kafka topic */
-	private static String kafkaTopic = null;
-	/**  Kafka producer */
-	private static Producer<String, String> producer;
-	/** hostname **/
-	private static String hostName;
 	/** Windows OS? **/
 	private static boolean isWinOs = false;
 
 	//TODO
 	//TODO - add MB https://www.ibm.com/developerworks/ru/library/j-jtp09196/index.html
 	//TODO
-	public static void watchDirectoryPath(Path watchedPathNio) {
+	public static void watchDirectoryPath(final Path watchedPathNio, final CommonJobSingleton commonData) {
 
 		String watchedDir = watchedPathNio.toAbsolutePath().toString() + File.separator;
 		LOGGER.info("Watching path: " + watchedPathNio.toString());
 
 		// We obtain the file system of the Path
-		FileSystem fs = watchedPathNio.getFileSystem();
+		final FileSystem fs = watchedPathNio.getFileSystem();
 
 		try (WatchService service = fs.newWatchService()) {
 			// We're interrested only in new files!
@@ -107,7 +93,6 @@ public class OraaudKafka {
 			WatchKey key = null;
 			while (true) {
 				key = service.take();
-
 				// Dequeueing events
 				Kind<?> kind = null;
 				for (WatchEvent<?> watchEvent : key.pollEvents()) {
@@ -115,14 +100,7 @@ public class OraaudKafka {
 					kind = watchEvent.kind();
 					if (StandardWatchEventKinds.OVERFLOW == kind) {
 						LOGGER.error("File listener recieved an overflow event!\n");
-						lockedFilesQueue.clear();
-						lockedFilesQueue =  Files
-								.list(watchedPathNio)
-								.filter(Files::isRegularFile)
-								.filter(dirPath -> dirPath.toString().endsWith(".xml"))
-//								.map(Path::toString)
-								.map(path -> {return new OraTrcNameHolder(path.toString());})
-								.collect(Collectors.toCollection(ConcurrentLinkedQueue::new));
+						commonData.initLockedFilesQueue(watchedPathNio);
 						//TODO
 						//TODO - more actions???
 						//TODO
@@ -134,10 +112,9 @@ public class OraaudKafka {
 						String fileName = watchedDir + newPath.getFileName(); 
 						LOGGER.info("New path created: " + fileName);
 						if (fileName.endsWith(".xml")) {
-							OraTrcNameHolder trcFile = new OraTrcNameHolder(fileName);
-							lockedFilesQueue.add(trcFile);
+							commonData.addFileToQueue(new OraTrcNameHolder(fileName));
 							LOGGER.info(fileName + " added to locked processing map");
-							LOGGER.info("Total unprocessed files in queue = " + lockedFilesQueue.size());
+							LOGGER.warn("Total unprocessed files in queue = " + commonData.getLockedFiles().size());
 						} else {
 							LOGGER.error("Non xml file detected " + fileName + "!");
 						}
@@ -145,7 +122,7 @@ public class OraaudKafka {
 				}
 
 				if (!key.reset()) {
-                    break; // loop
+					break; // loop
                 }
 			}
 		} catch (IOException | InterruptedException ioe) {
@@ -161,10 +138,21 @@ public class OraaudKafka {
 		}
 		loadProps(argv[0], 3);
 
+		String targetBroker = props.getProperty("a2.target.broker", "kafka").trim();
+		if ("kafka".equalsIgnoreCase(targetBroker)) {
+			targetSystem = TARGET_KAFKA;
+		} else if ("kinesis".equalsIgnoreCase(targetBroker)) {
+			targetSystem = TARGET_KINESIS;
+		} else {
+			LOGGER.fatal("wrong target broker type specified in configuration file " + argv[0]);
+			LOGGER.fatal("Exiting.");
+			System.exit(3);
+		}
+
 		String watchedPath = props.getProperty("a2.watched.path").trim();
 		if ("".equals(watchedPath) || watchedPath == null) {
-			LOGGER.error("watched.path parameter must set in configuration file " + argv[0]);
-			LOGGER.error("Exiting.");
+			LOGGER.fatal("watched.path parameter must set in configuration file " + argv[0]);
+			LOGGER.fatal("Exiting.");
 			System.exit(4);
 		}
 		// Sanity check - Check if path is a folder
@@ -172,15 +160,15 @@ public class OraaudKafka {
 		try {
 			Boolean isFolder = (Boolean) Files.getAttribute(watchedPathNio, "basic:isDirectory", LinkOption.NOFOLLOW_LINKS);
 			if (!isFolder) {
-				LOGGER.error("watched.path parameter " + watchedPathNio + " is not a folder");
-				LOGGER.error("Exiting.");
+				LOGGER.fatal("watched.path parameter " + watchedPathNio + " is not a folder");
+				LOGGER.fatal("Exiting.");
 				System.exit(4);
 			}
 		} catch (IOException ioe) {
 			// Folder does not exists
-			LOGGER.error(ExceptionUtils.getExceptionStackTrace(ioe));
-			LOGGER.error("watched.path parameter " + watchedPathNio + " not exist!");
-			LOGGER.error("Exiting.");
+			LOGGER.fatal(ExceptionUtils.getExceptionStackTrace(ioe));
+			LOGGER.fatal("watched.path parameter " + watchedPathNio + " not exist!");
+			LOGGER.fatal("Exiting.");
 			System.exit(4);
 		}
 
@@ -197,10 +185,6 @@ public class OraaudKafka {
 			}
 		}
 
-		parseKafkaProducerSettings(argv[0], 6, StringSerializer.class.getName());
-		// Initialize connection to Kafka
-		producer = new KafkaProducer<>(kafkaProps);
-
 		// Instantiate correct file lock checker
 		//TODO
 		//TODO - more OS'es and precision here!!!
@@ -209,51 +193,56 @@ public class OraaudKafka {
 		LOGGER.info("Running on " + osName);
 		if ("AIX".equals(osName) || "LINUX".equals(osName) || "SOLARIS".equals(osName) || "SUNOS".equals(osName)) {
 			fileLockChecker = new OpenFileSystemV();
-			hostName = execAndGetResult("hostname");
 		} else if ("WIN".contains(osName)) {
 			//TODO
 			//TODO Need more precise handling and testing for Windows
 			//TODO
 			fileLockChecker = new OpenFileGenericNio();
-			hostName = execAndGetResult("hostname");
 			isWinOs = true;
 		} else {
 			// Free BSD, HP-UX, Mac OS X
 			fileLockChecker = new OpenFileGenericX();
-			hostName = execAndGetResult("hostname");
 		}
 
-		// Before listening to new files populate queue with files already on FS
-		try {
-			lockedFilesQueue =  Files
-					.list(watchedPathNio)
-					.filter(Files::isRegularFile)
-					.filter(dirPath -> dirPath.toString().endsWith(".xml"))
-//					.map(Path::toString)
-					.map(path -> {return new OraTrcNameHolder(path.toString());})
-					.collect(Collectors.toCollection(ConcurrentLinkedQueue::new));
-		} catch (IOException ioe) {
-			LOGGER.error(ExceptionUtils.getExceptionStackTrace(ioe));
-			LOGGER.error("unable to read directory " + watchedPathNio + " !");
-			LOGGER.error("Exiting.");
-			System.exit(4);
-		}
+		final CommonJobSingleton commonData = CommonJobSingleton.getInstance();
 
-		if (lockedFilesQueue == null) {
-			lockedFilesQueue = new ConcurrentLinkedQueue<>();
-		} else {
-			if (lockedFilesQueue.size() > 0) {
-				LOGGER.info("Total of " + lockedFilesQueue.size() + " unprocessed file added to queue.");
-			}
+		if (targetSystem == TARGET_KAFKA) {
+			KafkaSingleton.getInstance().parseSettings(props, argv[0], 6);
+		} else if (targetSystem == TARGET_KINESIS) {
+			KinesisSingleton.getInstance().parseSettings(props, argv[0], 6);
 		}
 
 		// Add special shutdown thread
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			@Override
 			public void run() {
-				shutdown();
+				if (targetSystem == TARGET_KAFKA) {
+					KafkaSingleton.getInstance().shutdown();
+				} else if (targetSystem == TARGET_KINESIS) {
+					KinesisSingleton.getInstance().shutdown();
+				}
+				LOGGER.info("Shutting down...");
+				//TODO - more information about processing
 			}
 		});
+
+		// Before listening to new files populate queue with files already on FS
+		try {
+			commonData.initLockedFilesQueue(watchedPathNio);
+		} catch (IOException ioe) {
+			LOGGER.fatal(ExceptionUtils.getExceptionStackTrace(ioe));
+			LOGGER.fatal("unable to read directory " + watchedPathNio + " !");
+			LOGGER.fatal("Exiting.");
+			System.exit(4);
+		}
+
+		if (commonData.getLockedFiles() == null) {
+			commonData.initLockedFilesQueue();
+		} else {
+			if (commonData.getLockedFiles().size() > 0) {
+				LOGGER.info("Total of " + commonData.getLockedFiles().size() + " unprocessed file added to queue.");
+			}
+		}
 
 		// Additional single thread for checking closed files queue
 		ProcessLockedFilesMap mapProcessor = new ProcessLockedFilesMap(); 
@@ -282,37 +271,30 @@ public class OraaudKafka {
 		threadPool.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 
 		// Start watching for new files
-		watchDirectoryPath(watchedPathNio);
+		watchDirectoryPath(watchedPathNio, commonData);
 
-	}
-
-	private static void shutdown() {
-		LOGGER.info("Shutting down...");
-		//TODO - more information about processing
-	}
-
-	private static String execAndGetResult(String command) {
-		String result = null;
-		try (Scanner scanner = new Scanner(Runtime.getRuntime().exec(command).getInputStream()).useDelimiter("\\A")) {
-			result = scanner.hasNext() ? scanner.next() : "";
-		} catch (IOException e) {
-			LOGGER.error("Can't execute OS command:" + command);
-			LOGGER.error(ExceptionUtils.getExceptionStackTrace(e));
-		}
-		return result;
 	}
 
 	private static class ProcessLockedFilesMap implements Runnable {
+		final CommonJobSingleton commonData;
+		ProcessLockedFilesMap() {
+			this.commonData = CommonJobSingleton.getInstance();
+		}
 		@Override
 		public void run() {
-			Iterator<OraTrcNameHolder> lockedFilesIterator = lockedFilesQueue.iterator();
+			Iterator<OraTrcNameHolder> lockedFilesIterator = commonData.getLockedFiles().iterator();
 			while (lockedFilesIterator.hasNext()) {
 				OraTrcNameHolder trcFile = lockedFilesIterator.next();
 				try {
 //					if (!isFileLocked(new File(entry.getValue()))) {
 					if (!fileLockChecker.isLocked(trcFile.pid, trcFile.fileName)) {
 						LOGGER.info(trcFile.fileName + " is not locked, processing");
-						Callable<Void> processJob = new KafkaJob(trcFile);
+						Callable<Void> processJob = null;
+						if (targetSystem == TARGET_KAFKA) {
+							processJob = new KafkaJob(trcFile);
+						} else if (targetSystem == TARGET_KINESIS) {
+							processJob = new KinesisJob(trcFile);
+						}
 						try {
 							threadPool.submit(processJob);
 						} catch (RejectedExecutionException ree) {
@@ -321,94 +303,13 @@ public class OraaudKafka {
 							// We need to break cycle here
 							break;
 						}
-						//TODO
-						//TODO - ???
-						//TODO
+						//TODO remove here or in job???
 						lockedFilesIterator.remove();
 					}
 				} catch (IOException e) {
 					LOGGER.error("Exception while processing " + trcFile.fileName + "!\n" +
 							ExceptionUtils.getExceptionStackTrace(e));
 				}
-			}
-		}
-	}
-
-	private static class KafkaJob implements Callable<Void> {
-
-		final OraTrcNameHolder trcFile;
-
-		KafkaJob(OraTrcNameHolder trcFile) {
-			this.trcFile = trcFile;
-		}
-
-		@Override
-		public Void call() {
-			try {
-				boolean doSend = true;
-				ProducerRecord<String, String> record = null;
-				final File auditFile = new File(trcFile.fileName);
-				String kafkaKey = hostName + ":" + trcFile.fileName;
-				Scanner scanner = new Scanner(auditFile, "UTF-8");
-				String value = scanner.useDelimiter("\\A").next();
-				scanner.close();
-				if (value.trim().endsWith("</Audit>")) {
-					record = new ProducerRecord<>(kafkaTopic, kafkaKey, value);
-				} else {
-					doSend = false;
-				}
-				if (doSend) {
-					producer.send(
-						record,
-						(metadata, exception) -> {
-							if (metadata == null) {
-								// Error occured
-								LOGGER.error("Exception while sending " + trcFile.fileName + " to Kafka." );
-								LOGGER.error(ExceptionUtils.getExceptionStackTrace(exception));
-							} else {
-								//Delete file
-								try {
-									//TODO
-									//TODO
-									//TODO
-									Files.delete(auditFile.toPath());
-								} catch (IOException ioe) {
-									LOGGER.error("Exception while deleting " + trcFile.fileName + "!!!" );
-									LOGGER.error(ExceptionUtils.getExceptionStackTrace(ioe));
-								}
-							}
-						});
-				} else {
-					LOGGER.error("Mailformed or incomplete xml file: " + trcFile.fileName);
-					if (lockedFilesQueue.contains(trcFile)) {
-						LOGGER.error("Unhanled concurrency issue with xml file: " + trcFile.fileName);
-					} else {
-						lockedFilesQueue.add(trcFile);
-					}
-				}
-			} catch (IOException je) {
-				LOGGER.error("Exception while unmarshaling " + trcFile.fileName + "!!!" );
-				LOGGER.error(ExceptionUtils.getExceptionStackTrace(je));
-			}
-			return null;
-		}
-	}
-
-	private static class OraTrcNameHolder {
-		protected String fileName;
-		protected String pid;
-
-		protected OraTrcNameHolder(final String fileName) {
-			this.fileName = fileName;
-			try {
-//				String[] parts = fileName.split("_");
-//				this.pid = parts[parts.length - 2];
-//				this.timeStamp = parts[parts.length - 1].substring(0, parts[parts.length - 1].lastIndexOf('.'));
-//				parts = null;
-				String part = fileName.substring(fileName.lastIndexOf(File.separator) + 1, fileName.lastIndexOf('_'));
-				this.pid = part.substring(part.lastIndexOf('_') + 1);
-			} catch( Exception e) {
-				LOGGER.error("Exception while parsing file name " + fileName + "!!!" );
 			}
 		}
 	}
@@ -435,8 +336,8 @@ public class OraaudKafka {
 	}
 
 	private static void printUsage(String className, int exitCode) {
-		LOGGER.error("Usage:\njava " + className + " <full path to configuration file>");
-		LOGGER.error("Exiting.");
+		LOGGER.fatal("Usage:\njava " + className + " <full path to configuration file>");
+		LOGGER.fatal("Exiting.");
 		System.exit(exitCode);
 	}
 
@@ -444,9 +345,9 @@ public class OraaudKafka {
 		try {
 			props.load(new FileInputStream(configPath));
 		} catch (IOException eoe) {
-			LOGGER.error("Unable to open configuration file " + configPath);
-			LOGGER.error(ExceptionUtils.getExceptionStackTrace(eoe));
-			LOGGER.error("Exiting.");
+			LOGGER.fatal("Unable to open configuration file " + configPath);
+			LOGGER.fatal(ExceptionUtils.getExceptionStackTrace(eoe));
+			LOGGER.fatal("Exiting.");
 			System.exit(exitCode);
 		}
 	}
@@ -469,56 +370,6 @@ public class OraaudKafka {
 				workerThreadCount = WORKER_THREAD_COUNT;
 			}
 		}
-	}
-
-	private static void parseKafkaProducerSettings(String configPath, int exitCode, String kafkaSerializer) {
-		kafkaTopic = props.getProperty("a2.kafka.topic");
-		if (kafkaTopic == null || "".equals(kafkaTopic)) {
-			LOGGER.error("kafka.topic parameter must set in configuration file " + configPath);
-			LOGGER.error("Exiting.");
-			System.exit(exitCode);
-		}
-
-		String kafkaServers = props.getProperty("a2.kafka.servers");
-		if (kafkaServers == null || "".equals(kafkaServers)) {
-			LOGGER.error("kafka.servers parameter must set in configuration file " + configPath);
-			LOGGER.error("Exiting.");
-			System.exit(exitCode);
-		}
-
-		String kafkaClientId = props.getProperty("a2.kafka.client.id");
-		if (kafkaServers == null || "".equals(kafkaServers)) {
-			LOGGER.error("a2.kafka.client.id parameter must set in configuration file " + configPath);
-			LOGGER.error("Exiting.");
-			System.exit(exitCode);
-		}
-
-		//
-		//TODO - hardcoding!!!
-		//
-		int kafkaMaxRequestSize = 11010048;
-		int kafkaBatchSize = 256;
-
-		kafkaProps = new Properties();
-		kafkaProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaServers);
-		kafkaProps.put(ProducerConfig.CLIENT_ID_CONFIG, kafkaClientId);
-		kafkaProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-		kafkaProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, kafkaSerializer);
-		kafkaProps.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, kafkaMaxRequestSize);
-		kafkaProps.put(ProducerConfig.BATCH_SIZE_CONFIG, kafkaBatchSize);
-		/** Always use gzip compression */
-		kafkaProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "gzip");
-
-		//TODO
-		//TODO - crosscheck
-		//TODO
-		final String useSSL = props.getProperty("a2.security.protocol", "").trim();
-		if ("SSL".equals(useSSL)) {
-			kafkaProps.put("security.protocol", "SSL");
-			kafkaProps.put("ssl.truststore.location", props.getProperty("a2.security.truststore.location"));
-			kafkaProps.put("ssl.truststore.password", props.getProperty("a2.security.truststore.password"));
-		}
-
 	}
 
 

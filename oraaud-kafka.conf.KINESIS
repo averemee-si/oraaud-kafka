@@ -1,0 +1,11 @@
+a2.target.broker = kinesis
+
+a2.watched.path = /data/oracle/adump
+a2.worker.count = 32
+a2.locked.file.query.interval = 512
+
+a2.kinesis.region = eu-west-1
+a2.kinesis.stream = ora-aud-test
+a2.kinesis.access.key = AAAAAAAAAABBBBBBBBBB
+a2.kinesis.access.secret = AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDD
+
