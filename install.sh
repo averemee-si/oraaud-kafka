@@ -20,7 +20,7 @@ ORAAUD_HOME=/opt/a2/agents/oraaud
 mkdir -p $ORAAUD_HOME/lib
 cp target/lib/*.jar $ORAAUD_HOME/lib
 
-cp target/oraaud-kafka-0.1.0.jar $ORAAUD_HOME
+cp target/oraaud-kafka-0.9.0.jar $ORAAUD_HOME
 cp oraaud-kafka.sh $ORAAUD_HOME
 cp oraaud-kafka.conf $ORAAUD_HOME
 cp log4j.properties $ORAAUD_HOME
