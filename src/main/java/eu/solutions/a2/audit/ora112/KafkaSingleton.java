@@ -105,36 +105,36 @@ public class KafkaSingleton {
 		}
 
 		String optParam = null;
-		optParam = props.getProperty("a2.kafka.compression.type", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.compression.type", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, optParam);
 		} else {
 			/** Set to gzip by default */
 			kafkaProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "gzip");
 		}
 
-		optParam = props.getProperty("a2.kafka.batch.size", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.batch.size", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.BATCH_SIZE_CONFIG, optParam);
 		}
-		optParam = props.getProperty("a2.kafka.linger.ms", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.linger.ms", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.LINGER_MS_CONFIG, optParam);
 		}
-		optParam = props.getProperty("a2.kafka.acks", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.acks", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.ACKS_CONFIG, optParam);
 		}
-		optParam = props.getProperty("a2.kafka.max.request.size", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.max.request.size", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, optParam);
 		}
-		optParam = props.getProperty("a2.kafka.buffer.memory", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.buffer.memory", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.BUFFER_MEMORY_CONFIG, optParam);
 		}
-		optParam = props.getProperty("a2.kafka.retries", null).trim();
-		if (optParam != null) {
+		optParam = props.getProperty("a2.kafka.retries", "").trim();
+		if (!"".equals(optParam)) {
 			kafkaProps.put(ProducerConfig.RETRIES_CONFIG, optParam);
 		}
 

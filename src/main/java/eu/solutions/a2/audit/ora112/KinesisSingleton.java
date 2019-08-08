@@ -68,28 +68,28 @@ public class KinesisSingleton {
 	}
 
 	public void parseSettings(final Properties props, final String configPath, final int exitCode) {
-		streamName = props.getProperty("a2.kinesis.stream", null);
+		streamName = props.getProperty("a2.kinesis.stream", "");
 		if (streamName == null || "".equals(streamName)) {
 			LOGGER.fatal("a2.kinesis.stream parameter must set in configuration file " + configPath);
 			LOGGER.fatal("Exiting.");
 			System.exit(exitCode);
 		}
 
-		String region = props.getProperty("a2.kinesis.region", null);
+		String region = props.getProperty("a2.kinesis.region", "");
 		if (region == null || "".equals(region)) {
 			LOGGER.fatal("a2.kinesis.region parameter must set in configuration file " + configPath);
 			LOGGER.fatal("Exiting.");
 			System.exit(exitCode);
 		}
 
-		String accessKey = props.getProperty("a2.kinesis.access.key", null);
+		String accessKey = props.getProperty("a2.kinesis.access.key", "");
 		if (accessKey == null || "".equals(accessKey)) {
 			LOGGER.fatal("a2.kinesis.access.key parameter must set in configuration file " + configPath);
 			LOGGER.fatal("Exiting.");
 			System.exit(exitCode);
 		}
 
-		String accessSecret = props.getProperty("a2.kinesis.access.secret", null);
+		String accessSecret = props.getProperty("a2.kinesis.access.secret", "");
 		if (accessSecret == null || "".equals(accessSecret)) {
 			LOGGER.fatal("a2.kinesis.access.secret parameter must set in configuration file " + configPath);
 			LOGGER.fatal("Exiting.");
@@ -104,7 +104,7 @@ public class KinesisSingleton {
 		// The maxConnections parameter can be used to control the degree of
         // parallelism when making HTTP requests.
 		int maxConnections = 1;
-		String maxConnectionsString = props.getProperty("a2.kinesis.max.connections", null);
+		String maxConnectionsString = props.getProperty("a2.kinesis.max.connections", "");
 		if (maxConnectionsString != null && !"".equals(maxConnectionsString)) {
 			try {
 				maxConnections = Integer.parseInt(maxConnectionsString);
@@ -117,7 +117,7 @@ public class KinesisSingleton {
 
 		// Request timeout milliseconds
 		long requestTimeout = 30000;
-		String requestTimeoutString = props.getProperty("a2.kinesis.request.timeout", null);
+		String requestTimeoutString = props.getProperty("a2.kinesis.request.timeout", "");
 		if (requestTimeoutString != null && !"".equals(requestTimeoutString)) {
 			try {
 				requestTimeout = Integer.parseInt(requestTimeoutString);
@@ -130,7 +130,7 @@ public class KinesisSingleton {
 
 		// RecordMaxBufferedTime
 		long recordMaxBufferedTime = 5000;
-		String recordMaxBufferedTimeString = props.getProperty("a2.kinesis.request.record.max.buffered.time", null);
+		String recordMaxBufferedTimeString = props.getProperty("a2.kinesis.request.record.max.buffered.time", "");
 		if (recordMaxBufferedTimeString != null && !"".equals(recordMaxBufferedTimeString)) {
 			try {
 				recordMaxBufferedTime = Integer.parseInt(recordMaxBufferedTimeString);
@@ -142,7 +142,7 @@ public class KinesisSingleton {
 		config.setRecordMaxBufferedTime(recordMaxBufferedTime);
 
 		// fileSizeThreshold
-		String fileSizeThresholdString = props.getProperty("a2.kinesis.file.size.threshold", null);
+		String fileSizeThresholdString = props.getProperty("a2.kinesis.file.size.threshold", "");
 		if (fileSizeThresholdString != null && !"".equals(fileSizeThresholdString)) {
 			try {
 				fileSizeThreshold = Integer.parseInt(fileSizeThresholdString);
