@@ -1,3 +1,5 @@
+No longer maintained, please try [oralog](https://github.com/averemee-si/oralog) instead
+
 # oraaud-kafka
 
 [Oracle Database](https://www.oracle.com/database/index.html) audit files to [Apache Kafka](http://kafka.apache.org/) or [Amazon Kinesis](https://aws.amazon.com/kinesis/) transfer.
